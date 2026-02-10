@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الفرعون :: النسخة الماسية المحدثة 💎</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { gold: '#eab308', darkbg: '#0f172a' } } }
+        }
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+        body { font-family: 'Cairo', sans-serif; transition: background 0.3s, color 0.3s; }
+        .tab-content { display: none; animation: fadeIn 0.4s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .active-tab { border-bottom: 3px solid #eab308; background-color: rgba(234, 179, 8, 0.1); color: #ca8a04 !important; }
+        .inp { padding: 0.75rem; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.75rem; outline: none; transition: all 0.2s; }
+        .dark .inp { background-color: #334155; border-color: #475569; color: white; }
+        .inp:focus { border-color: #eab308; ring: 2px ring-gold; }
+        
+        #loginModal { display: flex; }
+        #appContainer { filter: blur(5px); pointer-events: none; }
+        body.logged-in #loginModal { display: none; }
+        body.logged-in #appContainer { filter: none; pointer-events: auto; }
+
+        @media print { 
+            .no-print { display: none !important; } 
+            #printArea { display: block !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-slate-800 dark:bg-slate-900 dark:text-gray-100 transition-all duration-300">
+
+    <div id="loginModal" class="fixed inset-0 bg-slate-900 z-[9999] flex flex-col items-center justify-center text-white">
+        <div class="bg-slate-800 p-8 rounded-3xl shadow-2xl border border-gold text-center max-w-sm w-full mx-4">
+            <h1 class="text-3xl font-black text-gold mb-2">نظام الفرعون</h1>
+            <p class="text-gray-400 mb-6 text-sm">أدخل كلمة المرور يا زعيم</p>
+            <input type="password" id="sysPass" placeholder="******" class="w-full p-3 rounded-xl bg-slate-700 border border-slate-600 text-center text-white text-xl outline-none mb-4">
+            <button onclick="checkLogin()" class="w-full bg-gold text-slate-900 font-bold py-3 rounded-xl hover:bg-yellow-400 transition">دخول 🚀</button>
+            <p id="loginErr" class="text-red-500 text-xs mt-3 hidden">كلمة السر غلط!</p>
+        </div>
+    </div>
+
+    <div id="appContainer" class="pb-20">
+        <header class="bg-white dark:bg-slate-800 shadow-lg sticky top-0 z-50">
+            <div class="container mx-auto px-4 py-3">
+                <div class="flex justify-between items-center mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-full bg-slate-900 text-gold flex items-center justify-center font-black text-xl border-2 border-gold cursor-pointer" onclick="showGeneralReport()">👑</div>
+                        <div>
+                            <h1 class="font-black text-lg">الفرعون <span class="text-gold">محمود رسمي</span></h1>
+                            <span class="text-[10px] text-green-600 font-bold bg-green-100 px-2 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">متصل بالسحابة ⚡</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="toggleDarkMode()" class="p-2 rounded-full bg-gray-100 dark:bg-slate-700">🌓</button>
+                        <button onclick="startScanner()" class="bg-gold text-slate-900 px-4 py-2 rounded-xl font-bold text-sm shadow-md flex items-center gap-2">📷 مسح كود</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-xl border border-blue-100 text-center">
+                        <h3 class="text-[10px] text-blue-600 font-bold">الطلاب</h3>
+                        <p id="count-total" class="text-xl font-black">0</p>
+                    </div>
+                    <div class="bg-green-50 dark:bg-green-900/30 p-3 rounded-xl border border-green-100 text-center">
+                        <h3 class="text-[10px] text-green-600 font-bold">الحضور</h3>
+                        <p id="count-present" class="text-xl font-black">0</p>
+                    </div>
+                    <div class="bg-red-50 dark:bg-red-900/30 p-3 rounded-xl border border-red-100 text-center">
+                        <h3 class="text-[10px] text-red-600 font-bold">الغياب</h3>
+                        <p id="count-absent" class="text-xl font-black">0</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="container mx-auto px-4 mt-6 max-w-6xl">
+            <div class="flex bg-white dark:bg-slate-800 rounded-2xl shadow-sm border dark:border-slate-700 overflow-hidden mb-6 no-print overflow-x-auto">
+                <button onclick="showTab('students')" id="btn-students" class="tab-btn active-tab flex-1 py-3 font-bold text-sm">👥 الطلاب</button>
+                <button onclick="showTab('attendance')" id="btn-attendance" class="tab-btn flex-1 py-3 font-bold text-sm border-x dark:border-slate-700">📅 الحضور</button>
+                <button onclick="showTab('grades')" id="btn-grades" class="tab-btn flex-1 py-3 font-bold text-sm border-l dark:border-slate-700">📊 الدرجات</button>
+                <button onclick="showTab('reports')" id="btn-reports" class="tab-btn flex-1 py-3 font-bold text-sm text-red-500">⚠️ الغياب</button>
+            </div>
+
+            <section id="students" class="tab-content active">
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border dark:border-slate-700 mb-6 relative">
+                    <h2 class="font-bold mb-4 text-lg">➕ تسجيل طالب جديد</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                        <input type="text" id="stdName" placeholder="اسم الطالب" class="inp">
+                        <input type="tel" id="stdPhone" placeholder="رقم ولي الأمر" class="inp">
+                        <input type="text" id="stdCenter" placeholder="السنتر" class="inp">
+                        <input type="text" id="stdNotes" placeholder="ملاحظات" class="inp">
+                        <button onclick="addStudent()" class="bg-slate-900 dark:bg-gold dark:text-slate-900 text-white font-bold rounded-xl p-3">حفظ الطالب</button>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <input type="text" onkeyup="searchStudents(this.value)" placeholder="🔍 ابحث بالاسم أو الكود..." class="w-full p-4 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none">
+                </div>
+                <div id="studentsGrid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+            </section>
+
+            <section id="attendance" class="tab-content">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border dark:border-slate-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-bold text-lg">📝 دفتر الحضور اليومي</h2>
+                        <input type="date" id="attDate" onchange="loadAttendance()" class="p-2 bg-yellow-50 dark:bg-slate-700 rounded-lg font-bold">
+                    </div>
+                    <div id="attList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                </div>
+            </section>
+
+            <section id="grades" class="tab-content">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border dark:border-slate-700 mb-6">
+                    <h2 class="font-bold mb-4 text-green-600">📊 رصد الدرجات والبحث الذكي</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label class="text-xs font-bold block mb-1">1. ابحث عن الطالب:</label>
+                            <input type="text" id="gradeSearchInp" onkeyup="filterGradeSelect(this.value)" placeholder="اكتب اسم الطالب هنا..." class="inp w-full mb-2">
+                            <select id="gradeStudentSelect" class="inp w-full"></select>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold block mb-1">2. بيانات الامتحان:</label>
+                            <input type="text" id="examName" placeholder="اسم الامتحان" class="inp w-full mb-2">
+                            <div class="flex gap-2">
+                                <input type="number" id="gradeValue" placeholder="الدرجة" class="inp flex-1 text-center font-black">
+                                <input type="number" id="maxGrade" placeholder="من" class="inp w-20 text-center">
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="sendGrade()" class="w-full bg-green-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-green-700 transition">إرسال النتيجة لولي الأمر ✅</button>
+                </div>
+                
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-3xl border dark:border-slate-700 overflow-hidden">
+                    <table class="w-full text-right text-sm">
+                        <thead class="bg-gray-50 dark:bg-slate-700">
+                            <tr><th class="p-3">الطالب</th><th>الامتحان</th><th>الدرجة</th></tr>
+                        </thead>
+                        <tbody id="gradesTableBody" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="reports" class="tab-content">
+                <button onclick="generateDailyReport()" class="w-full mb-6 bg-slate-900 text-gold font-black py-4 rounded-2xl shadow-xl">📋 استخراج التقرير الشامل للفرعون</button>
+                <div id="absenceList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+            </section>
+        </main>
+    </div>
+
+    <div id="studentModal" class="hidden fixed inset-0 bg-black/80 z-[2000] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 relative">
+            <button onclick="closeStudentModal()" class="absolute top-4 left-4 text-3xl text-gray-500">&times;</button>
+            <div id="studentProfileHeader" class="text-center mb-6"></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-gray-50 dark:bg-slate-700 p-4 rounded-2xl">
+                    <h3 class="font-bold mb-3 border-b pb-2">📅 سجل الحضور</h3>
+                    <ul id="studentAttHistory" class="text-xs space-y-2 max-h-60 overflow-y-auto"></ul>
+                </div>
+                <div class="bg-gray-50 dark:bg-slate-700 p-4 rounded-2xl">
+                    <h3 class="font-bold mb-3 border-b pb-2">📊 سجل الدرجات</h3>
+                    <ul id="studentGradeHistory" class="text-xs space-y-2 max-h-60 overflow-y-auto"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="scanModal" class="hidden fixed inset-0 bg-black/90 z-[1000] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl w-full max-w-sm text-center">
+            <button onclick="stopScanner()" class="float-left text-gray-400 text-2xl">&times;</button>
+            <h3 class="font-bold mb-4">امسح الكارنيه</h3>
+            <div id="reader" class="rounded-xl overflow-hidden bg-black aspect-square"></div>
+            <div id="scanMsg" class="mt-4 font-bold text-green-500"></div>
+        </div>
+    </div>
+
+    <script>
+        // تكوين Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPw3A7HcthkLKy5w5OJKk0k3pHfuyuh_k",
+            authDomain: "mahmoud-rasmi-assit.firebaseapp.com",
+            databaseURL: "https://mahmoud-rasmi-assit-default-rtdb.firebaseio.com",
+            projectId: "mahmoud-rasmi-assit",
+            storageBucket: "mahmoud-rasmi-assit.firebasestorage.app",
+            messagingSenderId: "578258334639",
+            appId: "1:578258334639:web:9397389b2a48deecd3355a"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        let html5QrCode = null;
+        let allStudents = [];
+
+        // إدارة الدخول
+        function checkLogin() {
+            if(document.getElementById('sysPass').value === "1234") {
+                document.body.classList.add('logged-in');
+                localStorage.setItem('isLoggedIn', 'true');
+            } else { document.getElementById('loginErr').classList.remove('hidden'); }
+        }
+        if(localStorage.getItem('isLoggedIn') === 'true') document.body.classList.add('logged-in');
+
+        // الوضع الليلي
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        }
+        if(localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+
+        // جلب البيانات الأساسية
+        db.ref('students').on('value', (snap) => {
+            const data = snap.val();
+            allStudents = data ? Object.values(data) : [];
+            updateUI();
+            filterGradeSelect(''); // تحديث قائمة الدرجات
+        });
+
+        db.ref('grades').on('value', (snap) => {
+            const list = snap.val() ? Object.values(snap.val()) : [];
+            document.getElementById('gradesTableBody').innerHTML = list.reverse().slice(0, 20).map(g => `
+                <tr><td class="p-3 font-bold">${g.name}</td><td>${g.exam}</td><td class="text-green-600 font-bold">${g.score}/${g.max}</td></tr>
+            `).join('');
+        });
+
+        function updateUI(filtered = null) {
+            const list = filtered || allStudents;
+            document.getElementById('count-total').innerText = allStudents.length;
+            
+            document.getElementById('studentsGrid').innerHTML = list.map(s => `
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border dark:border-slate-700 flex flex-col items-center relative">
+                    <div id="qr-${s.id}" class="bg-white p-1 rounded-lg mb-2"></div>
+                    <h4 onclick="showStudentProfile('${s.id}')" class="font-black cursor-pointer hover:text-gold transition text-center">${s.name} ℹ️</h4>
+                    <p class="text-[10px] text-gray-400">${s.center} | ${s.phone}</p>
+                    <div class="mt-3 flex gap-2 w-full">
+                        <button onclick="deleteStd('${s.id}')" class="flex-1 text-[10px] py-1 bg-red-50 text-red-500 rounded">حذف</button>
+                    </div>
+                </div>
+            `).join('');
+
+            list.forEach(s => {
+                const el = document.getElementById(`qr-${s.id}`);
+                if(el) { el.innerHTML = ''; new QRCode(el, { text: String(s.id), width: 70, height: 70 }); }
+            });
+            loadAttendance();
+        }
+
+        // تسجيل طالب
+        function addStudent() {
+            const name = document.getElementById('stdName').value;
+            const phone = document.getElementById('stdPhone').value;
+            if(!name || !phone) return alert("الاسم والرقم أساسي!");
+            const id = Date.now();
+            db.ref('students/'+id).set({ id, name, phone, center: document.getElementById('stdCenter').value, notes: document.getElementById('stdNotes').value });
+            document.querySelectorAll('.inp').forEach(i => i.value = '');
+        }
+
+        // ملف الطالب المفصل
+        function showStudentProfile(id) {
+            const s = allStudents.find(st => st.id == id);
+            document.getElementById('studentProfileHeader').innerHTML = `<h2 class="text-2xl font-black text-gold">${s.name}</h2><p>رقم ولي الأمر: ${s.phone}</p>`;
+            
+            // سجل الحضور للملف
+            db.ref('attendance').once('value', snap => {
+                const days = snap.val() || {};
+                let html = "";
+                Object.keys(days).forEach(date => {
+                    if(days[date][id]) html += `<li class="flex justify-between bg-white p-2 rounded"><span>📅 ${date}</span> <span class="text-green-600 font-bold">${days[date][id].time}</span></li>`;
+                });
+                document.getElementById('studentAttHistory').innerHTML = html || "لا يوجد حضور مسجل";
+            });
+
+            // سجل الدرجات للملف
+            db.ref('grades').once('value', snap => {
+                const gs = snap.val() || {};
+                let html = Object.values(gs).filter(g => g.name === s.name).map(g => `
+                    <li class="flex justify-between bg-white p-2 rounded"><span>📝 ${g.exam}</span> <span class="font-bold">${g.score}/${g.max}</span></li>
+                `).join('');
+                document.getElementById('studentGradeHistory').innerHTML = html || "لا يوجد درجات";
+            });
+            document.getElementById('studentModal').classList.remove('hidden');
+        }
+        function closeStudentModal() { document.getElementById('studentModal').classList.add('hidden'); }
+
+        // الحضور والغياب
+        function loadAttendance() {
+            const date = document.getElementById('attDate').value;
+            db.ref(`attendance/${date}`).on('value', snap => {
+                const logs = snap.val() || {};
+                const presentIDs = Object.keys(logs);
+                document.getElementById('count-present').innerText = presentIDs.length;
+                document.getElementById('count-absent').innerText = allStudents.length - presentIDs.length;
+
+                document.getElementById('attList').innerHTML = allStudents.map(s => {
+                    const isP = logs[s.id];
+                    return `<div class="p-3 rounded-xl border flex justify-between items-center ${isP?'bg-green-50 border-green-200':'bg-white'}">
+                        <div class="flex items-center gap-3">
+                            <button onclick="toggleAtt('${s.id}','${s.name}',${isP})" class="w-8 h-8 rounded-full ${isP?'bg-green-500 text-white':'bg-gray-100'}">${isP?'✔':'➕'}</button>
+                            <span class="font-bold text-sm">${s.name}</span>
+                        </div>
+                        <span class="text-[10px] text-gray-400">${isP?logs[s.id].time:'غائب'}</span>
+                    </div>`;
+                }).join('');
+
+                // قائمة الغياب مع واتساب
+                const absents = allStudents.filter(s => !logs[s.id]);
+                document.getElementById('absenceList').innerHTML = absents.map(s => `
+                    <div class="p-4 bg-red-50 rounded-xl flex justify-between items-center">
+                        <span class="font-bold">${s.name}</span>
+                        <a href="https://wa.me/2${s.phone}?text=تنبيه غياب: الطالب ${s.name} لم يحضر حصة ${date}" target="_blank" class="bg-green-600 text-white px-3 py-1 rounded-lg text-xs">واتساب 💬</a>
+                    </div>
+                `).join('');
+            });
+        }
+
+        function toggleAtt(id, name, isP) {
+            const date = document.getElementById('attDate').value;
+            if(isP) { if(confirm('إلغاء الحضور؟')) db.ref(`attendance/${date}/${id}`).remove(); }
+            else { db.ref(`attendance/${date}/${id}`).set({ name, time: new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) }); }
+        }
+
+        // الدرجات والبحث
+        function filterGradeSelect(q) {
+            const term = q.toLowerCase();
+            const filtered = allStudents.filter(s => s.name.toLowerCase().includes(term));
+            document.getElementById('gradeStudentSelect').innerHTML = filtered.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        }
+
+        function sendGrade() {
+            const id = document.getElementById('gradeStudentSelect').value;
+            const exam = document.getElementById('examName').value;
+            const score = document.getElementById('gradeValue').value;
+            const max = document.getElementById('maxGrade').value;
+            const s = allStudents.find(st => st.id == id);
+            
+            if(s && exam && score) {
+                db.ref('grades/'+Date.now()).set({ name: s.name, exam, score, max, phone: s.phone }).then(() => {
+                    const msg = `📊 نتيجة الطالب: ${s.name}\nالامتحان: ${exam}\nالدرجة: ${score} من ${max}\n- مستر محمود رسمي 👑`;
+                    window.open(`https://wa.me/2${s.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+                    alert('تم الحفظ والإرسال!');
+                });
+            }
+        }
+
+        // تقرير شامل
+        function generateDailyReport() {
+            const date = document.getElementById('attDate').value;
+            const present = document.getElementById('count-present').innerText;
+            const absent = document.getElementById('count-absent').innerText;
+            const msg = `👑 تقرير الفرعون اليومي 👑\n📅 التاريخ: ${date}\n✅ حضور: ${present}\n❌ غياب: ${absent}\n🔥 بالتوفيق للجميع!`;
+            alert(msg);
+        }
+
+        function showGeneralReport() {
+            alert(`نظام الفرعون يعمل بكفاءة!\nإجمالي البيانات: ${allStudents.length} طالب.`);
+        }
+
+        // الماسح
+        function startScanner() {
+            document.getElementById('scanModal').classList.remove('hidden');
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+                const s = allStudents.find(st => String(st.id) === text);
+                if(s) {
+                    const date = document.getElementById('attDate').value;
+                    db.ref(`attendance/${date}/${s.id}`).set({ name: s.name, time: new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) });
+                    document.getElementById('scanMsg').innerText = "تم تحضير: " + s.name;
+                    setTimeout(() => document.getElementById('scanMsg').innerText = "", 2000);
+                }
+            }).catch(()=>{});
+        }
+        function stopScanner() { if(html5QrCode) html5QrCode.stop(); document.getElementById('scanModal').classList.add('hidden'); }
+
+        function deleteStd(id) { if(confirm('حذف نهائي؟')) db.ref('students/'+id).remove(); }
+        function searchStudents(q) {
+            const term = q.toLowerCase();
+            updateUI(allStudents.filter(s => s.name.toLowerCase().includes(term) || String(s.id).includes(term)));
+        }
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-tab'));
+            document.getElementById(id).classList.add('active');
+            document.getElementById('btn-'+id).classList.add('active-tab');
+        }
+        document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
+    </script>
+</body>
+</html>
